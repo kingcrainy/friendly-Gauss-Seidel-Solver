@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gauss–Seidel Solver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-1:#0B0F1E;
+    --bg-2:#151233;
+    --glass: rgba(255,255,255,0.055);
+    --glass-strong: rgba(255,255,255,0.09);
+    --border: rgba(255,255,255,0.12);
+    --border-strong: rgba(255,255,255,0.22);
+    --ink:#F3F5FB;
+    --muted:#93A0C4;
+    --violet:#8B7CF6;
+    --cyan:#5EEAD4;
+    --pink:#F472B6;
+    --green:#4ADE80;
+    --red:#FB7185;
+    --grad: linear-gradient(135deg, var(--violet), var(--cyan));
+    --radius: 18px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background: var(--bg-1);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* ---------- animated blurred background blobs ---------- */
+  .bg-blobs{
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .blob{
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.55;
+    will-change: transform;
+  }
+  .blob.b1{
+    width: 520px; height: 520px;
+    background: radial-gradient(circle at 30% 30%, var(--violet), transparent 70%);
+    top: -160px; left: -120px;
+    animation: float1 22s ease-in-out infinite;
+  }
+  .blob.b2{
+    width: 460px; height: 460px;
+    background: radial-gradient(circle at 60% 40%, var(--cyan), transparent 70%);
+    bottom: -180px; right: -100px;
+    animation: float2 26s ease-in-out infinite;
+  }
+  .blob.b3{
+    width: 380px; height: 380px;
+    background: radial-gradient(circle at 50% 50%, var(--pink), transparent 70%);
+    top: 40%; left: 50%;
+    opacity: 0.32;
+    animation: float3 30s ease-in-out infinite;
+  }
+  @keyframes float1{
+    0%,100%{ transform: translate(0,0) scale(1); }
+    50%{ transform: translate(60px, 80px) scale(1.12); }
+  }
+  @keyframes float2{
+    0%,100%{ transform: translate(0,0) scale(1); }
+    50%{ transform: translate(-70px, -50px) scale(1.08); }
+  }
+  @keyframes float3{
+    0%,100%{ transform: translate(-50%,-50%) scale(1); }
+    50%{ transform: translate(-45%,-55%) scale(1.15); }
+  }
+
+  .wrap{
+    position: relative;
+    z-index: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 64px 24px 100px;
+  }
+
+  @keyframes riseIn{
+    from{ opacity: 0; transform: translateY(18px); }
+    to{ opacity: 1; transform: translateY(0); }
+  }
+  .rise{ animation: riseIn 0.7s cubic-bezier(.22,1,.36,1) both; }
+  .rise.d1{ animation-delay: .05s; }
+  .rise.d2{ animation-delay: .15s; }
+  .rise.d3{ animation-delay: .25s; }
+  .rise.d4{ animation-delay: .35s; }
+
+  /* ---------- hero ---------- */
+  .hero{
+    display:flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+  .hero h1{
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    font-size: clamp(34px, 5vw, 48px);
+    letter-spacing: -0.02em;
+    margin: 0 0 10px;
+    background: linear-gradient(135deg, #ffffff 30%, var(--cyan) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero p{
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+    max-width: 42ch;
+    line-height: 1.65;
+  }
+  .equation-chip{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: var(--glass);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .equation-chip b{ color: var(--cyan); font-weight: 600; }
+
+  /* ---------- glass panels ---------- */
+  .panel{
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+    margin-bottom: 22px;
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    transition: border-color .3s ease, box-shadow .3s ease;
+  }
+  .panel:hover{
+    border-color: var(--border-strong);
+  }
+  .panel h2{
+    font-family: 'Sora', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 18px;
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    letter-spacing: -0.01em;
+  }
+  .panel h2 .dot{
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--grad);
+    box-shadow: 0 0 12px var(--violet);
+  }
+
+  .controls-row{
+    display:flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .field{ display:flex; flex-direction:column; gap:7px; }
+  .field label{ font-size:11.5px; color: var(--muted); font-weight: 500; }
+  .field input{
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    width: 120px;
+    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  .field input:focus{
+    outline: none;
+    border-color: var(--violet);
+    background: rgba(255,255,255,0.09);
+    box-shadow: 0 0 0 3px rgba(139,124,246,0.18);
+  }
+
+  /* ---------- matrix grid ---------- */
+  .system{
+    display:flex;
+    align-items:flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .matrix-label{ font-size: 11.5px; color: var(--muted); margin-bottom: 9px; font-weight: 500; }
+  .grid-A{ display:grid; gap: 6px; }
+  .grid-col{ display:grid; gap: 6px; }
+  .cell{
+    width: 58px;
+    height: 42px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    text-align:center;
+    border-radius: 10px;
+    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .15s ease;
+  }
+  .cell:hover{ border-color: var(--border-strong); }
+  .cell:focus{
+    outline:none;
+    border-color: var(--cyan);
+    background: rgba(255,255,255,0.1);
+    box-shadow: 0 0 0 3px rgba(94,234,212,0.16);
+    transform: translateY(-1px);
+  }
+  .cell.diag{ border-color: rgba(139,124,246,0.5); background: rgba(139,124,246,0.08); }
+  .cross{
+    font-family:'Sora', sans-serif;
+    font-size: 22px;
+    color: var(--muted);
+    align-self:center;
+    padding: 0 2px;
+    margin-top: 22px;
+  }
+  .vec-col .cell{ width: 68px; }
+
+  /* ---------- buttons / status ---------- */
+  .actions{
+    display:flex;
+    align-items:center;
+    gap: 18px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  button.solve{
+    position: relative;
+    background: var(--grad);
+    color: #0B0F1E;
+    border: none;
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    font-size: 13.5px;
+    padding: 13px 26px;
+    border-radius: 12px;
+    cursor: pointer;
+    letter-spacing: 0.01em;
+    transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    box-shadow: 0 6px 24px rgba(139,124,246,0.35);
+    overflow: hidden;
+  }
+  button.solve:hover{ transform: translateY(-2px); box-shadow: 0 10px 30px rgba(139,124,246,0.45); filter: brightness(1.05); }
+  button.solve:active{ transform: translateY(0); }
+  button.solve:disabled{ opacity: 0.55; cursor: default; transform:none; box-shadow:none; }
+  button.solve.loading::after{
+    content:"";
+    position:absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.1s linear infinite;
+  }
+  @keyframes shimmer{
+    0%{ background-position: 200% 0; }
+    100%{ background-position: -200% 0; }
+  }
+
+  .status{ font-size: 12.5px; line-height:1.55; transition: opacity .25s ease; }
+  .status.ok{ color: var(--green); }
+  .status.warn{ color: #FBBF24; }
+  .status.err{ color: var(--red); }
+
+  /* ---------- results ---------- */
+  .solution-row{
+    display:flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .sol-item{
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 18px;
+    min-width: 112px;
+    transition: transform .2s ease, border-color .2s ease;
+  }
+  .sol-item:hover{ transform: translateY(-2px); border-color: var(--border-strong); }
+  .sol-item .k{ font-size: 11px; color: var(--muted); font-weight: 500; }
+  .sol-item .v{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 17px;
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  th, td{
+    text-align: right;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th{ color: var(--muted); font-weight: 500; text-align:right; position: sticky; top:0; background: rgba(21,18,51,0.85); backdrop-filter: blur(8px); }
+  td:first-child, th:first-child{ text-align:left; color: var(--muted); }
+  tbody tr{ transition: background .15s ease; }
+  tbody tr:hover{ background: rgba(255,255,255,0.04); }
+  .table-scroll{ max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+
+  canvas#chart{ width:100%; height: 220px; display:block; }
+
+  .hint{ font-size: 12.5px; color: var(--muted); line-height:1.65; margin-top: 16px; }
+  .footer{
+    margin-top: 52px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    display:flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  ::-webkit-scrollbar{ width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb{ background: var(--border-strong); border-radius: 4px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .blob, .rise, button.solve.loading::after{ animation: none !important; }
+    .rise{ opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-blobs">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<div class="wrap">
+
+  <div class="hero rise d1">
+    <div>
+      <h1>Gauss&ndash;Seidel</h1>
+      <p>Solve a system of linear equations by iterative refinement &mdash; enter A and b, watch each sweep converge on x.</p>
+    </div>
+    <div class="equation-chip"><b>A</b>x = <b>b</b></div>
+  </div>
+
+  <div class="panel rise d2">
+    <h2><span class="dot"></span>Setup</h2>
+    <div class="controls-row">
+      <div class="field">
+        <label for="n">size (n)</label>
+        <input type="number" id="n" min="2" max="8" value="3" />
+      </div>
+      <div class="field">
+        <label for="tol">tolerance</label>
+        <input type="text" id="tol" value="1e-6" />
+      </div>
+      <div class="field">
+        <label for="maxIter">max iterations</label>
+        <input type="number" id="maxIter" min="1" max="1000" value="50" />
+      </div>
+    </div>
+  </div>
+
+  <div class="panel rise d3">
+    <h2><span class="dot"></span>System &mdash; Ax = b</h2>
+    <div class="system">
+      <div>
+        <div class="matrix-label">A</div>
+        <div class="grid-A" id="gridA"></div>
+      </div>
+      <div class="cross">&times;</div>
+      <div>
+        <div class="matrix-label">x&#8320; (initial guess)</div>
+        <div class="grid-col vec-col" id="gridX0"></div>
+      </div>
+      <div class="cross">=</div>
+      <div>
+        <div class="matrix-label">b</div>
+        <div class="grid-col vec-col" id="gridB"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="solve" id="solveBtn">Run Gauss&ndash;Seidel</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="hint">Gauss&ndash;Seidel is guaranteed to converge when A is diagonally dominant: each diagonal entry's magnitude is at least the sum of the magnitudes of the rest of its row. Otherwise it may still converge &mdash; try it and see.</div>
+  </div>
+
+  <div class="panel rise d4" id="resultsPanel" style="display:none;">
+    <h2><span class="dot"></span>Solution</h2>
+    <div class="solution-row" id="solutionRow"></div>
+
+    <h2 style="margin-top:28px;"><span class="dot"></span>Convergence</h2>
+    <canvas id="chart"></canvas>
+
+    <h2 style="margin-top:28px;"><span class="dot"></span>Iteration trace</h2>
+    <div class="table-scroll">
+      <table id="histTable"></table>
+    </div>
+
+    <h2 style="margin-top:28px;"><span class="dot"></span>Residual (b &minus; Ax)</h2>
+    <div class="solution-row" id="residualRow"></div>
+  </div>
+
+  <div class="footer rise d4">
+    <span>Vanilla JS front end &middot; Python (NumPy) solver on a Vercel serverless function</span>
+    <span>x_i&#8319;&#8314;&#185; = (b_i &minus; &Sigma;a_ij x_j) / a_ii</span>
+  </div>
+</div>
+
+<script>
+const state = { n: 3 };
+
+function defaultA(n){
+  return Array.from({length:n}, () => Array(n).fill(0));
+}
+function defaultB(n){ return Array(n).fill(0); }
+function defaultX0(n){ return Array(n).fill(0); }
+
+function buildGrids(){
+  const n = state.n;
+  const gridA = document.getElementById('gridA');
+  const gridB = document.getElementById('gridB');
+  const gridX0 = document.getElementById('gridX0');
+
+  gridA.style.gridTemplateColumns = `repeat(${n}, 58px)`;
+  gridA.innerHTML = '';
+  const A = defaultA(n);
+  for(let i=0;i<n;i++){
+    for(let j=0;j<n;j++){
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'cell' + (i===j ? ' diag' : '');
+      inp.value = A[i][j];
+      inp.dataset.row = i; inp.dataset.col = j;
+      inp.id = `A_${i}_${j}`;
+      gridA.appendChild(inp);
+    }
+  }
+
+  gridB.innerHTML = '';
+  defaultB(n).forEach((v,i)=>{
+    const inp = document.createElement('input');
+    inp.type='text'; inp.className='cell'; inp.value=v; inp.id=`b_${i}`;
+    gridB.appendChild(inp);
+  });
+
+  gridX0.innerHTML = '';
+  defaultX0(n).forEach((v,i)=>{
+    const inp = document.createElement('input');
+    inp.type='text'; inp.className='cell'; inp.value=v; inp.id=`x0_${i}`;
+    gridX0.appendChild(inp);
+  });
+
+  document.getElementById('resultsPanel').style.display = 'none';
+  document.getElementById('status').textContent = '';
+}
+
+function readMatrixState(){
+  const n = state.n;
+  const A = [], b = [], x0 = [];
+  for(let i=0;i<n;i++){
+    const row = [];
+    for(let j=0;j<n;j++){
+      row.push(parseFloat(document.getElementById(`A_${i}_${j}`).value));
+    }
+    A.push(row);
+    b.push(parseFloat(document.getElementById(`b_${i}`).value));
+    x0.push(parseFloat(document.getElementById(`x0_${i}`).value));
+  }
+  return {A, b, x0};
+}
+
+function setStatus(msg, cls){
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + (cls || '');
+}
+
+function drawChart(history){
+  const canvas = document.getElementById('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth;
+  const cssH = 220;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,cssW,cssH);
+
+  const pad = {l:50, r:16, t:14, b:26};
+  const w = cssW - pad.l - pad.r;
+  const h = cssH - pad.t - pad.b;
+
+  const errors = history.map(r => Math.max(r.error, 1e-15));
+  const logErrors = errors.map(e => Math.log10(e));
+  const minLog = Math.min(...logErrors);
+  const maxLog = Math.max(...logErrors);
+  const range = (maxLog - minLog) || 1;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t);
+  ctx.lineTo(pad.l, pad.t + h);
+  ctx.lineTo(pad.l + w, pad.t + h);
+  ctx.stroke();
+
+  ctx.fillStyle = '#93A0C4';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  const steps = 4;
+  for(let s=0; s<=steps; s++){
+    const logVal = minLog + (range * s/steps);
+    const y = pad.t + h - (s/steps)*h;
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+w, y); ctx.stroke();
+    ctx.fillText('1e' + logVal.toFixed(1), pad.l - 8, y + 3);
+  }
+
+  const grad = ctx.createLinearGradient(pad.l, 0, pad.l + w, 0);
+  grad.addColorStop(0, '#8B7CF6');
+  grad.addColorStop(1, '#5EEAD4');
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  history.forEach((r, idx) => {
+    const x = pad.l + (idx/(history.length-1 || 1)) * w;
+    const logE = Math.log10(Math.max(r.error,1e-15));
+    const y = pad.t + h - ((logE - minLog)/range) * h;
+    if(idx===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = '#93A0C4';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('iteration 1', pad.l + 4, pad.t + h + 16);
+  ctx.textAlign = 'right';
+  ctx.fillText('iteration ' + history.length, pad.l + w, pad.t + h + 16);
+}
+
+function renderResults(data, n){
+  const panel = document.getElementById('resultsPanel');
+  panel.style.display = 'block';
+  panel.classList.remove('rise');
+  void panel.offsetWidth;
+  panel.classList.add('rise');
+
+  const solRow = document.getElementById('solutionRow');
+  solRow.innerHTML = '';
+  data.solution.forEach((v,i)=>{
+    const d = document.createElement('div');
+    d.className = 'sol-item';
+    d.innerHTML = `<div class="k">x${i+1}</div><div class="v">${v.toFixed(6)}</div>`;
+    solRow.appendChild(d);
+  });
+
+  const resRow = document.getElementById('residualRow');
+  resRow.innerHTML = '';
+  data.residual.forEach((v,i)=>{
+    const d = document.createElement('div');
+    d.className = 'sol-item';
+    d.innerHTML = `<div class="k">row ${i+1}</div><div class="v">${v.toExponential(2)}</div>`;
+    resRow.appendChild(d);
+  });
+
+  const table = document.getElementById('histTable');
+  let head = '<thead><tr><th>iter</th><th>error</th>' + Array.from({length:n},(_,i)=>`<th>x${i+1}</th>`).join('') + '</tr></thead>';
+  let body = '<tbody>' + data.history.map(r =>
+    `<tr><td>${r.iteration}</td><td>${r.error.toExponential(3)}</td>` +
+    r.x.map(v => `<td>${v.toFixed(6)}</td>`).join('') + '</tr>'
+  ).join('') + '</tbody>';
+  table.innerHTML = head + body;
+
+  drawChart(data.history);
+}
+
+async function runSolve(){
+  const btn = document.getElementById('solveBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  setStatus('Solving…', '');
+
+  const {A, b, x0} = readMatrixState();
+  const tol = parseFloat(document.getElementById('tol').value);
+  const maxIter = parseInt(document.getElementById('maxIter').value, 10);
+
+  try{
+    const res = await fetch('/api/solve', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({A, b, x0, tol, maxIter})
+    });
+    const data = await res.json();
+    if(!res.ok){
+      setStatus(data.error || 'Something went wrong.', 'err');
+      document.getElementById('resultsPanel').style.display = 'none';
+      return;
+    }
+
+    if(!data.diagonallyDominant){
+      setStatus('A is not diagonally dominant — convergence isn\'t guaranteed, but it may still work.', 'warn');
+    } else {
+      setStatus('A is diagonally dominant — convergence is guaranteed.', 'ok');
+    }
+
+    if(data.converged){
+      setStatus(document.getElementById('status').textContent + ` Converged in ${data.history.length} iterations.`, data.diagonallyDominant ? 'ok' : 'warn');
+    } else {
+      setStatus(`Did not converge within ${maxIter} iterations. Last error: ${data.history[data.history.length-1].error.toExponential(2)}`, 'err');
+    }
+
+    renderResults(data, state.n);
+  } catch(err){
+    setStatus('Request failed: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+document.getElementById('n').addEventListener('change', (e) => {
+  let n = parseInt(e.target.value, 10);
+  n = Math.max(2, Math.min(8, n || 3));
+  e.target.value = n;
+  state.n = n;
+  buildGrids();
+});
+
+document.getElementById('solveBtn').addEventListener('click', runSolve);
+
+buildGrids();
+</script>
+</body>
+</html>
